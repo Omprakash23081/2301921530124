@@ -29,46 +29,111 @@ const VALID_PACKAGES = [
   "utils",
 ];
 
-function validate(value, validValues, fieldName) {
-  if (!validValues.includes(value)) {
-    throw new Error(
-      `Invalid ${fieldName} "${value}". Allowed values: ${validValues.join(", ")}`,
-    );
+function parseJwt(token) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(Buffer.from(base64, 'base64').toString().split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return null;
+  }
+}
+
+let cachedToken = null;
+let tokenExpiry = 0;
+
+export async function getValidToken() {
+  if (cachedToken && Date.now() < tokenExpiry - 60000) {
+    return cachedToken;
+  }
+
+  const email = process.env.CLIENT_EMAIL || "csaiml23081@glbitm.ac.in";
+  const name = process.env.CLIENT_NAME || "om prakash kumar";
+  const rollNo = process.env.CLIENT_ROLL_NO || "2301921530124";
+  const accessCode = process.env.CLIENT_ACCESS_CODE || "xxkJnk";
+  const clientID = process.env.CLIENT_ID || "8f850f9d-3873-4093-bc27-2da500fd9bcb";
+  const clientSecret = process.env.CLIENT_SECRET || "FHPydmZvhnuwdkgH";
+  const baseUrl = process.env.BASE_URL || "http://4.224.186.213/evaluation-service";
+
+  try {
+    const response = await axios.post(`${baseUrl}/auth`, {
+      email,
+      name,
+      rollNo,
+      accessCode,
+      clientID,
+      clientSecret
+    });
+
+    cachedToken = response.data.access_token;
+    const payload = parseJwt(cachedToken);
+    if (payload && payload.MapClaims && payload.MapClaims.exp) {
+      tokenExpiry = payload.MapClaims.exp * 1000;
+    } else {
+      tokenExpiry = Date.now() + 14 * 60 * 1000;
+    }
+
+    process.env.ACCESS_TOKEN = `Bearer ${cachedToken}`;
+    return cachedToken;
+  } catch (error) {
+    console.error("Failed to refresh token in logger:", error.message);
+    if (process.env.ACCESS_TOKEN) {
+      return process.env.ACCESS_TOKEN.replace("Bearer ", "");
+    }
+    throw error;
   }
 }
 
 export async function Log(stack, level, packageName, message) {
-  validate(stack, VALID_STACKS, "stack");
-  validate(level, VALID_LEVELS, "level");
-  validate(packageName, VALID_PACKAGES, "package");
+  if (!VALID_STACKS.includes(stack)) throw new Error("Invalid stack");
+
+  if (!VALID_LEVELS.includes(level)) throw new Error("Invalid level");
+
+  if (!VALID_PACKAGES.includes(packageName)) throw new Error("Invalid package");
 
   try {
-    const { data } = await axios.post(
-      `${process.env.BASE_URL}/logs`,
+    const token = await getValidToken();
+    const baseUrl = process.env.BASE_URL || "http://4.224.186.213/evaluation-service";
+
+    const response = await axios.post(
+      `${baseUrl}/logs`,
       {
         stack,
         level,
         package: packageName,
-        message,
+        message: message.substring(0, 48),
       },
       {
         headers: {
-          Authorization: process.env.ACCESS_TOKEN,
+          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       },
     );
 
-    return data;
+    return response.data;
   } catch (error) {
+    console.error("Log dispatch failed:", error.message);
     if (error.response) {
-      throw new Error(
-        `Logging API Error (${error.response.status}): ${
-          error.response.data.message || JSON.stringify(error.response.data)
-        }`,
-      );
+      console.error("Log dispatch error details:", JSON.stringify(error.response.data));
     }
-
-    throw new Error(`Failed to send log: ${error.message}`);
+    return null;
   }
 }
+
+export async function loggingMiddleware(req, res, next) {
+  const start = Date.now();
+  res.on("finish", async () => {
+    try {
+      const duration = Date.now() - start;
+      await Log("backend", "info", "middleware", `${req.method} ${req.originalUrl} - ${res.statusCode} (${duration}ms)`);
+    } catch (err) {
+      console.error("Logger middleware error:", err.message);
+    }
+  });
+  next();
+}
+
