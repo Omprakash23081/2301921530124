@@ -9,15 +9,19 @@ export function getTopTenPriorityNotifications(notifications) {
   
   return [...notifications]
     .sort((a, b) => {
+      const dateA = new Date(a.Timestamp);
+      const dateB = new Date(b.Timestamp);
+      
+      // Primary Sort: Recency (Recent first)
+      if (dateA.getTime() !== dateB.getTime()) {
+        return dateB - dateA;
+      }
+      
+      // Secondary Sort (Tie-breaker): Priority (Placement > Result > Event)
       const pA = priorityMap[a.Type] || 0;
       const pB = priorityMap[b.Type] || 0;
       
-      if (pA !== pB) {
-        return pB - pA; // Descending priority: Placement > Result > Event
-      }
-      
-      // Secondary: Sort by recent first
-      return new Date(b.Timestamp) - new Date(a.Timestamp);
+      return pB - pA;
     })
     .slice(0, 10);
 }
