@@ -8,12 +8,12 @@ dotenv.config({ path: path.resolve("./logging-middleware/.env") });
 const BASE_URL = "http://4.224.186.213/evaluation-service";
 
 const credentials = {
-  email: "csaiml23081@glbitm.ac.in",
-  name: "om prakash kumar",
-  rollNo: "2301921530124",
-  accessCode: "xxkJnk",
-  clientID: "8f850f9d-3873-4093-bc27-2da500fd9bcb",
-  clientSecret: "FHPydmZvhnuwdkgH"
+  email: process.env.EMAIL,
+  name: process.env.NAME,
+  rollNo: process.env.ROLL_NO,
+  accessCode: process.env.ACCESS_CODE,
+  clientID: process.env.CLIENT_ID,
+  clientSecret: process.env.CLIENT_SECRET
 };
 
 async function getNewToken() {
@@ -75,7 +75,8 @@ async function runTests() {
     console.log("Notifications returned count:", notifRes.data.notifications.length);
     console.log("Sample notification:", notifRes.data.notifications[0]);
     
-    // Check sorting logic
+    // Check sorting logic: strictly sorted by Timestamp descending globally.
+    // If timestamps are equal, sorted by Type Priority (Placement > Result > Event)
     const notifs = notifRes.data.notifications;
     let sortingCorrect = true;
     const priorityMap = { "Placement": 3, "Result": 2, "Event": 1 };
@@ -83,18 +84,19 @@ async function runTests() {
     for (let i = 1; i < notifs.length; i++) {
       const prev = notifs[i - 1];
       const curr = notifs[i];
-      const pPrev = priorityMap[prev.Type] || 0;
-      const pCurr = priorityMap[curr.Type] || 0;
       
-      if (pPrev < pCurr) {
+      const dPrev = new Date(prev.Timestamp);
+      const dCurr = new Date(curr.Timestamp);
+      
+      if (dPrev < dCurr) {
         sortingCorrect = false;
-        console.error(`FAIL: Sorting violation at index ${i}. Prev type: ${prev.Type}, Curr type: ${curr.Type}`);
-      } else if (pPrev === pCurr) {
-        const dPrev = new Date(prev.Timestamp);
-        const dCurr = new Date(curr.Timestamp);
-        if (dPrev < dCurr) {
+        console.error(`FAIL: Global timestamp ordering violation at index ${i}. Prev: ${prev.Timestamp}, Curr: ${curr.Timestamp}`);
+      } else if (dPrev.getTime() === dCurr.getTime()) {
+        const pPrev = priorityMap[prev.Type] || 0;
+        const pCurr = priorityMap[curr.Type] || 0;
+        if (pPrev < pCurr) {
           sortingCorrect = false;
-          console.error(`FAIL: Recency violation at index ${i}. Prev: ${prev.Timestamp}, Curr: ${curr.Timestamp}`);
+          console.error(`FAIL: Tie-break priority violation at index ${i}. Prev type: ${prev.Type}, Curr type: ${curr.Type}`);
         }
       }
     }

@@ -50,12 +50,12 @@ export async function getValidToken() {
     return cachedToken;
   }
 
-  const email = process.env.CLIENT_EMAIL || "csaiml23081@glbitm.ac.in";
-  const name = process.env.CLIENT_NAME || "om prakash kumar";
-  const rollNo = process.env.CLIENT_ROLL_NO || "2301921530124";
-  const accessCode = process.env.CLIENT_ACCESS_CODE || "xxkJnk";
-  const clientID = process.env.CLIENT_ID || "8f850f9d-3873-4093-bc27-2da500fd9bcb";
-  const clientSecret = process.env.CLIENT_SECRET || "FHPydmZvhnuwdkgH";
+  const email = process.env.EMAIL;
+  const name = process.env.NAME;
+  const rollNo = process.env.ROLL_NO;
+  const accessCode = process.env.ACCESS_CODE;
+  const clientID = process.env.CLIENT_ID;
+  const clientSecret = process.env.CLIENT_SECRET;
   const baseUrl = process.env.BASE_URL || "http://4.224.186.213/evaluation-service";
 
   try {
